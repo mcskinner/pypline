@@ -15,6 +15,9 @@ class Placeholder(object):
         self._has = False
         self._val = None
 
+    def name(self):
+        return self._name
+
     def get(self):
         if not self._has:
             raise ValueError('no value set for `{}`'.format(self._name))
@@ -70,16 +73,17 @@ def defer(*peels):
                 if param.default is param.empty:
                     raise TypeError('missing required positional param `{}`'.format(param.name))
 
-            def most_inner_fn(*peeled_args):
-                if len(fakes) != len(peeled_args):
-                    raise TypeError('expected {} args, got {}'.format(
-                        len(fakes), len(peeled_args)))
+            def most_inner_fn(*bound_args, **bound_kwargs):
+                if len(bound_args) < len(fakes):
+                    raise TypeError('missing deferred param `{}`'.format(
+                        fakes[len(bound_args)].name()))
 
-                for fake, peel in zip(fakes, peeled_args):
+                for fake, peel in zip(fakes, bound_args):
                     fake.set(peel)
 
                 try:
-                    return thunk()
+                    leftover_args = bound_args[len(fakes):]
+                    return thunk(*leftover_args, **bound_kwargs)
                 finally:
                     for fake in fakes:
                         fake.unset()
@@ -89,13 +93,13 @@ def defer(*peels):
     return decorator
 
 
-@defer('a')
+@defer('a', 'b')
 def some_func(a, b, c=9):
     print(100*a + 10*b + c)
 
 
 def main():
-    some_func(1, 2)(3)
+    some_func(1)(2, 3)
 
 
 if __name__ == '__main__':
