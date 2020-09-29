@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
 import functools
-import inspect
+
+import fnspect
 
 
 class Placeholder(object):
@@ -40,18 +41,13 @@ def with_placeholders(func):
     return wrapper
 
 
-def fn_params(func):
-    """Shorthand to get the parameter spec for a function."""
-    return inspect.signature(func).parameters.values()
-
-
 def defer(*peels):
     if len(peels) != len(set(peels)):
         raise TypeError('duplicate args in {}'.format(peels))
 
     def decorator(func):
         pos_args = {
-            p.name: i for i, p in enumerate(fn_params(func))
+            p.name: i for i, p in enumerate(fnspect.params(func))
             if p.default is p.empty
         }
         vindex = []
@@ -69,7 +65,7 @@ def defer(*peels):
                 my_args = my_args[:i] + [fake] + my_args[i:]
             thunk = functools.partial(with_placeholders(func), *my_args, **kwargs)
 
-            for param in fn_params(thunk):
+            for param in fnspect.params(thunk):
                 if param.default is param.empty:
                     raise TypeError('missing required positional param `{}`'.format(param.name))
 
@@ -93,6 +89,15 @@ def defer(*peels):
     return decorator
 
 
+def to_op(func, **kwargs):
+    params = fnspect.params(func)
+
+    # By convention first param is the input.
+    op_in = params.pop(0)
+    lfunc = functools.partial(func, **kwargs)
+    return lfunc, op_in.name
+
+
 @defer('a', 'b')
 def some_func(a, b, c=9):
     print(100*a + 10*b + c)
@@ -100,6 +105,8 @@ def some_func(a, b, c=9):
 
 def main():
     some_func(1)(2, 3)
+    func, name = to_op(some_func, b=10)
+    print(name, fnspect.required_params(func), fnspect.optional_params(func))
 
 
 if __name__ == '__main__':
